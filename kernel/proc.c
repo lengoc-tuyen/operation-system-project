@@ -4,6 +4,7 @@
 #include "riscv.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "ptree.h"
 #include "defs.h"
 
 struct cpu cpus[NCPU];
@@ -25,6 +26,50 @@ extern char trampoline[]; // trampoline.S
 // memory model when using p->parent.
 // must be acquired before any p->lock.
 struct spinlock wait_lock;
+
+// Copy a consistent snapshot of at most max active processes to user space.
+int
+collect_ptree(uint64 address, int max)
+{
+  struct proc *caller = myproc();
+  struct proc *p;
+  int count = 0;
+
+  if(address == 0 || max <= 0)
+    return -1;
+
+  // wait_lock stabilizes parent pointers. It must be acquired before p->lock.
+  acquire(&wait_lock);
+  for(p = proc; p < &proc[NPROC] && count < max; p++){
+    struct ptreeinfo info;
+
+    acquire(&p->lock);
+    if(p->state == UNUSED){
+      release(&p->lock);
+      continue;
+    }
+
+    info.pid = p->pid;
+    info.ppid = p->parent == 0 ? 0 : p->parent->pid;
+    info.state = p->state;
+    info.memsize = p->sz;
+    safestrcpy(info.name, p->name, sizeof(info.name));
+
+    if(copyout(caller->pagetable,
+               address + count * sizeof(info),
+               (char *)&info, sizeof(info)) < 0){
+      release(&p->lock);
+      release(&wait_lock);
+      return -1;
+    }
+
+    count++;
+    release(&p->lock);
+  }
+  release(&wait_lock);
+
+  return count;
+}
 
 // Allocate a page for each process's kernel stack.
 // Map it high in memory, followed by an invalid
