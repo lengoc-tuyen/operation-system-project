@@ -198,6 +198,7 @@ UPROGS=\
 	$U/_zombie\
 	$U/_pstree\
 	$U/_ptreetest\
+	$U/_trace\
 
 
 
