@@ -199,6 +199,7 @@ UPROGS=\
 	$U/_pstree\
 	$U/_ptreetest\
 	$U/_trace\
+	$U/_sysinfotest\
 
 
 
