@@ -101,9 +101,6 @@ sys_ptree(void)
 
   argaddr(0, &buffer);
   argint(1, &max);
-  if(buffer == 0 || max <= 0)
-    return -1;
-
   return collect_ptree(buffer, max);
 }
 

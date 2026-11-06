@@ -196,10 +196,17 @@ UPROGS=\
 	$U/_grind\
 	$U/_wc\
 	$U/_zombie\
-	$U/_pstree\
-	$U/_ptreetest\
+	$U/_sleep\
+	$U/_pingpong\
+	$U/_primes\
+	$U/_cp\
+	$U/_tree\
+	$U/_du\
+	$U/_diff\
 	$U/_trace\
 	$U/_sysinfotest\
+	$U/_pstree\
+	$U/_ptreetest\
 
 
 
