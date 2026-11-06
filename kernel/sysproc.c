@@ -120,8 +120,8 @@ sys_sysinfo(void)
   struct sysinfo info;
 
   argaddr(0, &address);
-  info.freemem = freemem();
-  info.nproc = nproc();
+  info.freemem = get_freemem();
+  info.nproc = get_nproc();
 
   if(copyout(myproc()->pagetable, address, (char *)&info, sizeof(info)) < 0)
     return -1;
