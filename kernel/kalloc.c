@@ -92,7 +92,7 @@ kalloc(void)
 }
 
 uint64
-freemem(void)
+get_freemem(void)
 {
   uint64 bytes = 0;
   struct run *r;
