@@ -104,6 +104,7 @@ extern uint64 sys_close(void);
 extern uint64 sys_ptree(void);
 extern uint64 sys_trace(void);
 extern uint64 sys_sysinfo(void);
+extern uint64 sys_pgaccess(void);
 
 // An array mapping syscall numbers from syscall.h
 // to the function that handles the system call.
@@ -131,7 +132,8 @@ static uint64 (*syscalls[])(void) = {
 [SYS_close]   sys_close,
 [SYS_ptree]   sys_ptree,
 [SYS_trace]   sys_trace,
-[SYS_sysinfo] sys_sysinfo,
+[SYS_sysinfo]  sys_sysinfo,
+[SYS_pgaccess] sys_pgaccess, // ánh xạ SYS_pgaccess tới sys_pgaccess
 };
 
 static char *syscall_names[] = {
@@ -158,7 +160,8 @@ static char *syscall_names[] = {
 [SYS_close]   "close",
 [SYS_ptree]   "ptree",
 [SYS_trace]   "trace",
-[SYS_sysinfo] "sysinfo",
+[SYS_sysinfo]  "sysinfo",
+[SYS_pgaccess] "pgaccess", // tên syscall để hỗ trợ trace
 };
 
 void
