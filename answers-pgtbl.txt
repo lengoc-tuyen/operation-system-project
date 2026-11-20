@@ -1,0 +1,96 @@
+4.2. In bảng trang - Giải thích các trang lá trong output của vmprint()
+
+Output của tiến trình init (pid 1) ngay sau khi exec("init"):
+
+page table 0x0000000087f4d000
+ ..0: pte 0x0000000021fd2401 pa 0x0000000087f49000
+ .. ..0: pte 0x0000000021fd2001 pa 0x0000000087f48000
+ .. .. ..0: pte 0x0000000021fd281b pa 0x0000000087f4a000
+ .. .. ..1: pte 0x0000000021fd1c17 pa 0x0000000087f47000
+ .. .. ..2: pte 0x0000000021fd1807 pa 0x0000000087f46000
+ .. .. ..3: pte 0x0000000021fd1417 pa 0x0000000087f45000
+ ..255: pte 0x0000000021fd3001 pa 0x0000000087f4c000
+ .. ..511: pte 0x0000000021fd2c01 pa 0x0000000087f4b000
+ .. .. ..509: pte 0x0000000021fd5413 pa 0x0000000087f55000
+ .. .. ..510: pte 0x0000000021fd5807 pa 0x0000000087f56000
+ .. .. ..511: pte 0x000000002000180b pa 0x0000000080006000
+
+Địa chỉ vật lý có thể khác nhau giữa các lần chạy, nhưng cấu trúc cây và các
+bit quyền thì giống nhau.
+
+
+1. Cách đọc một PTE
+
+- 10 bit thấp của pte là các cờ: V = 0x001, R = 0x002, W = 0x004, X = 0x008,
+  U = 0x010, G = 0x020, A = 0x040, D = 0x080.
+- 44 bit tiếp theo là số trang vật lý (PPN): pa = (pte >> 10) << 12.
+  Ví dụ: 0x21fd281b >> 10 = 0x87f4a, nhân với 4096 được pa = 0x87f4a000.
+- Sv39 có 3 cấp. Địa chỉ ảo được chia thành 3 chỉ số 9 bit (L2, L1, L0) và
+  12 bit offset. Số nhóm ".." trên mỗi dòng cho biết cấp của PTE:
+  ".." là cấp 2 (bảng gốc), ".. .." là cấp 1, ".. .. .." là cấp 0 (trang lá).
+- PTE chỉ có bit V (cờ = 0x01, không có R/W/X) là PTE trung gian, trỏ tới
+  bảng trang cấp dưới. Các dòng "..0", ".. ..0", "..255", ".. ..511" đều là
+  PTE trung gian.
+- PTE có ít nhất một trong các bit R/W/X là trang lá, trỏ tới trang dữ liệu
+  thật.
+
+
+2. Vùng địa chỉ thấp (L2 = 0, L1 = 0): bộ nhớ của chương trình init
+
+Bốn trang lá này nằm ở địa chỉ ảo 0x0, 0x1000, 0x2000, 0x3000. exec() tạo
+chúng từ file ELF của init và bằng uvmalloc() khi cấp phát stack.
+
+a) ..0 (va 0x0000), cờ 0x01b = V R X U
+   Trang text (mã lệnh) của init. User được đọc và thực thi nhưng không được
+   ghi, để chương trình không tự sửa mã lệnh của chính nó.
+
+b) ..1 (va 0x1000), cờ 0x017 = V R W U
+   Trang data/bss của init (biến toàn cục). User được đọc và ghi nhưng không
+   được thực thi.
+
+c) ..2 (va 0x2000), cờ 0x007 = V R W, KHÔNG có U
+   Trang bảo vệ (guard page) nằm ngay dưới stack. exec() cấp 2 trang rồi gọi
+   uvmclear() để xóa bit U ở trang thấp hơn. Nếu stack bị tràn xuống đây thì
+   user truy cập vào trang không có U, gây page fault, và kernel giết tiến
+   trình thay vì để nó ghi đè lên vùng data.
+
+d) ..3 (va 0x3000), cờ 0x017 = V R W U
+   Trang stack của user. exec() đặt sp ở đỉnh trang này (0x4000) và chép
+   các tham số argv vào đây. User được đọc và ghi nhưng không được thực thi.
+
+So với Hình 3.4 trong sách xv6: hình vẽ text và data như một khối liền và có
+heap nằm trên stack. Với init, text và data nằm ở 2 trang riêng nên có quyền
+khác nhau (R X và R W), còn heap chưa có trang nào vì init chưa gọi sbrk().
+
+
+3. Vùng địa chỉ cao (L2 = 255, L1 = 511): ba trang đặc biệt ở đỉnh MAXVA
+
+L2 = 255 là chỉ số cao nhất mà Sv39 của xv6 dùng (MAXVA = 1 << 38). Ba trang
+lá ở L0 = 509, 510, 511 là ba trang cuối cùng của không gian địa chỉ ảo.
+
+e) ..509 (va 0x3fffffd000 = USYSCALL), cờ 0x013 = V R U
+   Trang chia sẻ giữa kernel và user của phần 4.1. Đầu trang chứa
+   struct usyscall với pid của tiến trình. Chỉ có R và U: user đọc được pid
+   mà không cần trap vào kernel, nhưng không ghi và không thực thi được.
+
+f) ..510 (va 0x3fffffe000 = TRAPFRAME), cờ 0x007 = V R W, KHÔNG có U
+   Trang trapframe của tiến trình (p->trapframe). Khi xảy ra trap, uservec
+   trong trampoline.S lưu các thanh ghi user vào đây, và userret khôi phục
+   chúng khi quay về user. Chỉ kernel (supervisor mode) đọc ghi được trang
+   này. Không có U để user không đọc trộm hay sửa các thanh ghi đã lưu.
+
+g) ..511 (va 0x3ffffff000 = TRAMPOLINE), cờ 0x00b = V R X, KHÔNG có U
+   Trang trampoline chứa mã uservec/userret. pa 0x80006000 nằm trong vùng mã
+   kernel; đây cũng chính là trang vật lý mà page table của kernel ánh xạ ở
+   cùng địa chỉ ảo TRAMPOLINE. Nhờ vậy đoạn mã này chạy được cả trước và sau
+   khi đổi thanh ghi satp. Chỉ có R X: chạy được nhưng không ghi được. Không
+   có U nên user không gọi trực tiếp được; CPU chỉ thực thi nó ở supervisor
+   mode sau khi trap.
+
+
+4. Về bit A và D
+
+Tất cả các PTE trên đều có A = 0 và D = 0, vì vmprint() được gọi ngay khi
+exec() vừa tạo xong page table mới, trước khi init chạy lệnh user nào. Phần
+cứng RISC-V chỉ bật A (và D khi ghi) khi trang thật sự được truy cập. Đây cũng
+là cơ chế mà phần 4.3 (pgaccess) dựa vào.
