@@ -207,6 +207,7 @@ UPROGS=\
 	$U/_sysinfotest\
 	$U/_pstree\
 	$U/_ptreetest\
+	$U/_ugetpidtest\
 
 
 
