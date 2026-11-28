@@ -127,3 +127,47 @@ sys_sysinfo(void)
     return -1;
   return 0;
 }
+
+// Kiểm tra các trang bộ nhớ user đã được truy cập (PTE_A) và trả về bitmask.
+// Tham số user truyền vào: địa chỉ ảo bắt đầu, số lượng trang, địa chỉ buffer để ghi bitmask kết quả
+uint64
+sys_pgaccess(void)
+{
+  uint64 start_va;
+  int npages;
+  uint64 mask_va;
+
+  // Lấy 3 tham số từ thanh ghi a0, a1, a2 của tiến trình user
+  argaddr(0, &start_va);
+  argint(1, &npages);
+  argaddr(2, &mask_va);
+
+  // Giới hạn số trang tối đa là 32 (tương ứng 32 bit của unsigned int)
+  if(npages < 0 || npages > 32)
+    return -1;
+
+  // Căn xuống đầu trang để tránh lệch offset và kiểm tra tràn địa chỉ MAXVA
+  uint64 va = PGROUNDDOWN(start_va);
+  if(va >= MAXVA || (uint64)npages * PGSIZE > MAXVA - va)
+    return -1;
+
+  struct proc *p = myproc();
+  unsigned int mask = 0; // bitmask tạm trong kernel lưu trạng thái truy cập
+
+  for(int i = 0; i < npages; i++){
+    // Tìm con trỏ PTE cấp 0 tương ứng với địa chỉ ảo của trang thứ i (không cấp phát mới)
+    pte_t *pte = walk(p->pagetable, va + (uint64)i * PGSIZE, 0);
+
+    // Nếu PTE hợp lệ và phần cứng đã bật bit PTE_A (trang đã được đọc/ghi)
+    if(pte != 0 && (*pte & PTE_V) && (*pte & PTE_A)){
+      mask |= (1U << i);  // đánh dấu bit thứ i trong bitmask
+      *pte &= ~PTE_A;     // xóa bit PTE_A để lần gọi pgaccess sau chỉ đo truy cập mới
+    }
+  }
+
+  // Chép bitmask kết quả từ kernel ra buffer của user
+  if(copyout(p->pagetable, mask_va, (char *)&mask, sizeof(mask)) < 0)
+    return -1;
+
+  return 0;
+}
