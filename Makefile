@@ -208,6 +208,7 @@ UPROGS=\
 	$U/_pstree\
 	$U/_ptreetest\
 	$U/_ugetpidtest\
+	$U/_pgaccesstest\
 
 
 
